@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="RS Limiter Calculator">
+  <rect width="512" height="512" rx="96" fill="#0b0e13"/>
+  <!-- Limiter transfer curve: linear, then held flat at the threshold -->
+  <path d="M72 420 L268 180 L440 180" fill="none" stroke="#4fa3ff" stroke-width="30"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="72" y1="180" x2="268" y2="180" stroke="#273246" stroke-width="12" stroke-dasharray="26 22"/>
+  <text x="256" y="110" font-family="system-ui, sans-serif" font-size="92" font-weight="700"
+        fill="#e6ecf5" text-anchor="middle">RS</text>
+</svg>
