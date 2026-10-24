@@ -21,6 +21,8 @@ import {
   ProtectionDomain,
   SCHEMA_VERSION,
   deviation,
+  dspLevelToDbu,
+  expectedOutputVrms,
   isKnown,
 } from '../../engine';
 import { analyzeFor } from '../useAnalysis';
@@ -248,10 +250,14 @@ export function Results() {
                     <tbody>
                       {ch.measurements.map((m) => {
                         const gain = a.amp && isKnown(a.amp.gainDb) ? a.amp.gainDb.value : null;
+                        // The test level may be on any scale, so it goes through the
+                        // device reference rather than being assumed to be in dBu.
+                        const levelDbu =
+                          m.dspOutputLevel === null
+                            ? null
+                            : dspLevelToDbu(m.dspOutputLevel, m.dspOutputScale, a.dspRef);
                         const planned =
-                          gain !== null && m.dspOutputLevel !== null && m.dspOutputScale === 'dBu'
-                            ? 0.775 * Math.pow(10, (m.dspOutputLevel + gain) / 20)
-                            : null;
+                          gain !== null && levelDbu !== null ? expectedOutputVrms(levelDbu, gain) : null;
                         const d = deviation(planned, m.measuredVrms, 0.5);
                         return (
                           <tr key={m.id}>

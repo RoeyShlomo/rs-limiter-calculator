@@ -293,13 +293,13 @@ export function analyzeChannel(input: AnalyzeInput): ChannelAnalysis {
         'it serves, and state that the other domain is unprotected.',
     );
   }
-  if (!dsp?.limiters.some((l) => l.protects === 'peak')) {
+  if (dsp && !dsp.limiters.some((l) => l.protects === 'peak')) {
     warnings.push(
       'No peak limiter is configured. A thermal limiter alone does not prevent excursion damage or ' +
         'amplifier clipping.',
     );
   }
-  if (!dsp?.limiters.some((l) => l.protects === 'thermal')) {
+  if (dsp && !dsp.limiters.some((l) => l.protects === 'thermal')) {
     warnings.push(
       'No thermal / RMS limiter is configured. A peak limiter alone does NOT provide complete ' +
         'loudspeaker protection: it cannot prevent long-term thermal overload.',
@@ -481,17 +481,29 @@ function analyzeDomain(d: DomainInput): DomainAnalysis {
               ]
             : undefined,
       });
-      threshold = stage
-        ? expressThreshold(atLimiter, stage.thresholdScale, dspRef, {
-            relativeReferenceDbu: dsp?.relativeReferenceDbu.value ?? null,
-            crestFactorDb: channel.assumedCrestFactorDb,
-            impedanceOhm: totalLoadOhm,
-          })
-        : unknown(
+      threshold = !stage
+        ? unknown(
             'dB',
             'level',
             `No limiter stage on the DSP is assigned to the ${DOMAIN_LABELS[domain]} domain.`,
-          );
+          )
+        : stage.thresholdScale === 'W'
+          ? // A threshold shown in watts denotes power at the amplifier output into the
+            // stated load, not anything measurable at the DSP output.
+            {
+              ...equivalentPower,
+              notes: [
+                'A limiter threshold denominated in watts refers to the equivalent power at the ' +
+                  'AMPLIFIER output into the stated load, not to any quantity at the DSP output. ' +
+                  'Confirm which load the device figure assumes.',
+                ...(equivalentPower.notes ?? []),
+              ],
+            }
+          : expressThreshold(atLimiter, stage.thresholdScale, dspRef, {
+              relativeReferenceDbu: dsp?.relativeReferenceDbu.value ?? null,
+              crestFactorDb: channel.assumedCrestFactorDb,
+              impedanceOhm: totalLoadOhm,
+            });
       for (const s of ['dBu', 'dBFS', 'Vrms', 'dBV'] as ThresholdScale[]) {
         if (stage && s === stage.thresholdScale) continue;
         alternates.push({
@@ -577,13 +589,16 @@ function analyzeDomain(d: DomainInput): DomainAnalysis {
   };
 }
 
+/**
+ * Only a limiter the user actually assigned to this domain serves it.
+ *
+ * A single limiter with no RMS / peak separation is NOT reused across domains: it
+ * can serve one domain at a time, so producing a threshold for the others would
+ * present protection the device cannot deliver.
+ */
 function pickStage(dsp: DspDevice | null, domain: ProtectionDomain): LimiterStage | null {
   if (!dsp) return null;
-  return (
-    dsp.limiters.find((l) => l.protects === domain) ??
-    dsp.limiters.find((l) => l.type === 'single-unspecified') ??
-    null
-  );
+  return dsp.limiters.find((l) => l.protects === domain) ?? null;
 }
 
 function dedupeMissing(items: MissingDatum[]): MissingDatum[] {

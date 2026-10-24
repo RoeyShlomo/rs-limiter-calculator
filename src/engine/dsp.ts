@@ -172,20 +172,17 @@ export function expressThreshold(
         sources: ['Required DSP output level', 'Defined reference level'],
       });
     }
-    case 'W': {
-      const z = opts.impedanceOhm;
-      if (!z)
-        return unknown('W', 'power', 'A threshold in watts needs the load impedance it refers to.');
-      const v = dbuToVrms(requiredDspOutputDbu);
-      return tracked((v * v) / z, 'W', 'power', 'calculated', 'low', {
-        formula: `P = Vrms^2 / R = (${v.toFixed(4)} V)^2 / ${z} ohm`,
-        sources: ['Required DSP output level', 'Load impedance'],
-        notes: [
-          'A threshold expressed in watts at the DSP output is only meaningful as an equivalent figure ' +
-            'for a resistive load; it is not power delivered to the loudspeaker.',
-        ],
-      });
-    }
+    case 'W':
+      // Power is an amplifier-output quantity. Deriving watts from a DSP output level
+      // would describe power dissipated by the DSP into the loudspeaker load, which is
+      // not a real circuit, so no number is produced here.
+      return unknown(
+        'W',
+        'power',
+        'A threshold in watts refers to power at the amplifier output into a stated load. It is not ' +
+          'derived from the DSP output level. Use the equivalent power figure for the protection ' +
+          'domain, and confirm which load the device assumes.',
+      );
     case 'manufacturer-defined':
       return unknown(
         'dB',

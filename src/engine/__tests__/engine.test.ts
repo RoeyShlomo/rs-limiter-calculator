@@ -16,6 +16,7 @@ import {
   dspReference,
   effectiveLoadPerDevice,
   expectedOutputVrms,
+  expressThreshold,
   isKnown,
   measured,
   newAmplifier,
@@ -451,5 +452,92 @@ describe('Dynamic parameters', () => {
   it('explains the crest factor offset of an RMS detector', () => {
     expect(crestFactorEffect(12).peakAboveThresholdDb).toBe(12);
     expect(crestFactorEffect(12).note).toMatch(/12\.0 dB above the RMS threshold/);
+  });
+});
+
+describe('Quality review fixes', () => {
+  const speaker = () =>
+    newLoudspeaker({ nominalImpedance: spec(8, 'ohm'), aesPower: spec(400, 'W') });
+  const amp = () =>
+    newAmplifier({
+      voltageGainDb: spec(32, 'dB'),
+      ratings: [{ impedanceOhm: 8, powerW: 4000, status: 'manufacturer' }],
+    });
+
+  it('does not reuse a single undifferentiated limiter across protection domains', () => {
+    const single = newLimiterStage({ type: 'single-unspecified', protects: 'thermal', thresholdScale: 'dBu' });
+    const r = analyzeChannel({
+      channel: newChannel(),
+      loudspeaker: newLoudspeaker({
+        nominalImpedance: spec(8, 'ohm'),
+        aesPower: spec(400, 'W'),
+        publishedPeakVoltage: spec(120, 'Vpeak'),
+      }),
+      amplifier: amp(),
+      dsp: newDsp({ dbfsConvention: 'aes17', analogFullScaleDbu: spec(18, 'dBu'), limiters: [single] }),
+    });
+    // The limiter serves the thermal domain it was assigned to...
+    expect(isKnown(r.domains.thermal.threshold)).toBe(true);
+    // ...and does NOT silently also serve the peak domain.
+    expect(isKnown(r.domains.peak.threshold)).toBe(false);
+    expect((r.domains.peak.threshold.notes ?? []).join(' ')).toMatch(/No peak limiter stage is configured/);
+    expect(r.warnings.join(' ')).toMatch(/single limiter with no RMS \/ peak separation/);
+  });
+
+  it('reports a watt-denominated threshold as power at the amplifier output', () => {
+    const r = analyzeChannel({
+      channel: newChannel({ margins: { thermalDb: 0, peakDb: 0, clipDb: 0 } }),
+      loudspeaker: speaker(),
+      amplifier: amp(),
+      dsp: newDsp({
+        dbfsConvention: 'aes17',
+        analogFullScaleDbu: spec(18, 'dBu'),
+        limiters: [newLimiterStage({ type: 'rms', protects: 'thermal', thresholdScale: 'W' })],
+      }),
+    });
+    const th = r.domains.thermal.threshold;
+    expect(th.unit).toBe('W');
+    // 400 W AES into 8 ohm, no margin: the equivalent power at the amplifier output.
+    expect(th.value).toBeCloseTo(400, 6);
+    expect((th.notes ?? []).join(' ')).toMatch(/AMPLIFIER output/);
+  });
+
+  it('never derives a watt figure from a DSP output level', () => {
+    const ref = dspReference(newDsp({ dbfsConvention: 'aes17', analogFullScaleDbu: spec(18, 'dBu') }));
+    expect(isKnown(expressThreshold(0, 'W', ref, { impedanceOhm: 8 }))).toBe(false);
+  });
+
+  it('stays silent about limiter gaps until a processor is assigned', () => {
+    const noDsp = analyzeChannel({
+      channel: newChannel(),
+      loudspeaker: speaker(),
+      amplifier: amp(),
+      dsp: null,
+    });
+    expect(noDsp.warnings.join(' ')).not.toMatch(/No peak limiter is configured/);
+    const withDsp = analyzeChannel({
+      channel: newChannel(),
+      loudspeaker: speaker(),
+      amplifier: amp(),
+      dsp: newDsp({ limiters: [newLimiterStage({ type: 'rms', protects: 'thermal' })] }),
+    });
+    expect(withDsp.warnings.join(' ')).toMatch(/No peak limiter is configured/);
+  });
+
+  it('derives a measured gain from a test level recorded in dBFS, not only in dBu', () => {
+    const ref = dspReference(newDsp({ dbfsConvention: 'aes17', analogFullScaleDbu: spec(18, 'dBu') }));
+    // -18 dBFS under AES17 with a +18 dBu full scale is 0 dBu at the analog output.
+    const m = newMeasurement({
+      dspOutputLevel: -18,
+      dspOutputScale: 'dBFS',
+      measuredVrms: 30.9,
+      instrument: 'true-RMS meter',
+      instrumentTrueRms: true,
+      loadOhm: 8,
+    });
+    const cal = calibrateGain(m, ref);
+    expect(isKnown(cal.gainDb)).toBe(true);
+    expect(cal.gainDb.value).toBeCloseTo(vrmsToDbu(30.9), 6);
+    expect(cal.gainDb.status).toBe('measured');
   });
 });

@@ -1,7 +1,15 @@
 /** Resolves the active channel's equipment and runs the engine. */
 
 import { useMemo } from 'react';
-import { ChannelAnalysis, analyzeChannel, ChannelConfig, Project } from '../engine';
+import {
+  ChannelAnalysis,
+  analyzeChannel,
+  calibrateGain,
+  dspReference,
+  isKnown,
+  ChannelConfig,
+  Project,
+} from '../engine';
 import { useStore } from '../state/store';
 
 export function analyzeFor(project: Project | null, channel: ChannelConfig | null): ChannelAnalysis | null {
@@ -10,13 +18,16 @@ export function analyzeFor(project: Project | null, channel: ChannelConfig | nul
   const amplifier = project.amplifiers.find((a) => a.id === channel.amplifierId) ?? null;
   const dsp = project.dsps.find((d) => d.id === channel.dspId) ?? null;
   // A measured chain gain, when one was saved, overrides the published figure.
-  const lastMeasured = [...channel.measurements]
+  // The test level may have been set on any scale, so it is converted through the
+  // device reference rather than being assumed to be in dBu.
+  const ref = dspReference(dsp);
+  const measuredGainDb = [...channel.measurements]
     .reverse()
-    .find((m) => m.measuredVrms !== null && m.dspOutputLevel !== null);
-  const measuredGainDb =
-    lastMeasured && lastMeasured.measuredVrms !== null && lastMeasured.dspOutputScale === 'dBu'
-      ? 20 * Math.log10(lastMeasured.measuredVrms / 0.775) - (lastMeasured.dspOutputLevel as number)
-      : null;
+    .reduce<number | null>((found, m) => {
+      if (found !== null) return found;
+      const gain = calibrateGain(m, ref).gainDb;
+      return isKnown(gain) ? gain.value : null;
+    }, null);
   return analyzeChannel({ channel, loudspeaker, amplifier, dsp, measuredGainDb });
 }
 
