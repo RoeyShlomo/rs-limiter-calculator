@@ -31,7 +31,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  lang: 'he',
+  lang: 'en',
   theme: 'dark',
   defaultMargins: { ...DEFAULT_MARGINS },
   defaultConvention: 'unknown',
@@ -103,6 +103,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettingsState] = useState<Settings>(() => ({
     ...DEFAULT_SETTINGS,
     ...read<Partial<Settings>>(KEY.settings, {}),
+    // The interface is English-only. Older saved settings may still say 'he'.
+    lang: 'en',
   }));
   const [projects, setProjects] = useState<Project[]>(() => read<Project[]>(KEY.projects, []));
   const [activeId, setActiveId] = useState<string | null>(() => read<string | null>(KEY.active, null));

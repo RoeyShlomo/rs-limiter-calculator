@@ -1,7 +1,7 @@
 import { Card, Notice, PageHead, PlainNumberField, SelectField } from '../components';
 import { useStore } from '../../state/store';
 import { BRAND, DbfsConvention, ENGINE_VERSION, PRODUCT, SCHEMA_VERSION } from '../../engine';
-import { Lang, TranslationKey } from '../../i18n';
+import { TranslationKey } from '../../i18n';
 
 export function SettingsScreen() {
   const { t, settings, setSettings, projects, library, clearAll } = useStore();
@@ -10,16 +10,7 @@ export function SettingsScreen() {
     <>
       <PageHead title={t('set.title')} />
 
-      <Card title={t('set.language')}>
-        <SelectField<Lang>
-          label={t('set.language')}
-          value={settings.lang}
-          onChange={(v) => setSettings({ lang: v })}
-          options={[
-            { value: 'he', label: t('set.he') },
-            { value: 'en', label: t('set.en') },
-          ]}
-        />
+      <Card title={t('set.theme')}>
         <SelectField<'dark' | 'light'>
           label={t('set.theme')}
           value={settings.theme}
